@@ -1,2 +1,2 @@
 - setup-file:
-    local-name: /home/charles/listen/devel/setup.sh
+    local-name: /home/charles/ros_hal_tests/devel/setup.sh
