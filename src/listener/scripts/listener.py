@@ -60,7 +60,7 @@ rings = hal.rings()
 print "rings: ", rings
 
 # Message details:
-msg_fmt  = 'd'
+msg_fmt  = '<d'
 msg_size = struct.calcsize(msg_fmt)
 
 # Global variable for ring handle
@@ -74,7 +74,10 @@ def callback(data):
         print pose.positions[0]
 
         if w.available > msg_size:
-            w.write(struct.pack('d',pose.positions[0]))
+            msg = struct.pack('d',pose.positions[0])
+            w.write(msg)
+            print " ".join(hex(ord(n)) for n in msg)
+
 
     # investigate scratchpad region if one is defined
     if w.scratchpad_size:

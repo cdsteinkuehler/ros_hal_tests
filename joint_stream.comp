@@ -39,6 +39,8 @@ pin out u32 underrun   "number of failed read attempts";
 pin out u32 received   "number of successful read attempts";
 pin out u32 tooslow    "number of times the reader couldnt keep up with the writer";
 pin out u32 avail      "number of bytes (valid data) currently available in the buffer";
+pin out u32 hi;
+pin out u32 lo;
 
 function _;
 
@@ -63,6 +65,12 @@ ToDo more detail goes here
 #include "hal_priv.h"
 #include "hal_ring.h"	        /* ringbuffer declarations */
 
+typedef union {
+    hal_s32_t s[2];
+    hal_u32_t u[2];
+    hal_float_t f[1];
+} hal_data_univ;
+
 static char *ring = "ring_0";
 RTAPI_MP_STRING(ring,  "name of ring to attach");
 
@@ -74,15 +82,17 @@ FUNCTION(_) {
     ringvec_t vec[2];
     size_t size;
     const void *data;
-    const float *dataf;
-    float buf[6];
+    const double *dataf;
+    hal_data_univ buf[6];
 
     if (record_read(&rb, (void*)&data, &size) == 0) {
         // Copy data to output
         // dataf = data;
         memcpy(buf, data, size > sizeof(buf) ? sizeof(buf) : size);
-        joint_pos_cmd(0) = buf[0];
-        
+        joint_pos_cmd(0) = buf[0].f[0];
+        lo = buf[0].u[0];
+        hi = buf[0].u[1];
+        avail = size;        
 
         // consume record
         record_shift(&rb);
