@@ -67,22 +67,19 @@ static char *ring = "ring_0";
 RTAPI_MP_STRING(ring,  "name of ring to attach");
 
 static ringbuffer_t rb;
-static ringiter_t ri;
 static char *name = "joint_stream";
 
 FUNCTION(_) {
     ringvec_t vec[2];
     size_t size;
-    const void *data;
-    const float *dataf;
-    float buf[6];
+    const double *d;
 
-    if (record_read(&rb, (void*)&data, &size) == 0) {
+    if (record_read(&rb, (const void**)&d, &size) == 0) {
         // Copy data to output
         // dataf = data;
-        memcpy(buf, data, size > sizeof(buf) ? sizeof(buf) : size);
-        joint_pos_cmd(0) = buf[0];
-        
+        //memcpy(buf, data, size > sizeof(buf) ? sizeof(buf) : size);
+        joint_pos_cmd(0) = *d;
+        rtapi_print_msg(RTAPI_MSG_INFO,"got %g", *d);
 
         // consume record
         record_shift(&rb);
@@ -91,12 +88,6 @@ FUNCTION(_) {
 	// ring empty
 	underrun++;
 	return;
-    }
-
-    if (rb.scratchpad) {
-        rtapi_snprintf(rb.scratchpad,ring_scratchpad_size(&rb),
-    		   "received=%d underrun=%d",
-    		   received, underrun);
     }
 }
 
@@ -129,8 +120,6 @@ int rtapi_app_main(void)
 
     rb.header->reader = comp_id;
     rb.header->reader_instance = rtapi_instance;
-
-    record_iter_init(&rb, &ri);
 
     if ((retval = export(name, 0))) {
 	rtapi_print_msg(RTAPI_MSG_ERR,
