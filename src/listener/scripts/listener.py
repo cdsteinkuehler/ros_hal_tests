@@ -49,18 +49,11 @@ def print_ring(r):
     print "name=%s size=%d reader=%d writer=%d scratchpad=%d" % (r.name,r.size,r.reader,r.writer,r.scratchpad_size),
     print "use_rmutex=%d use_wmutex=%d type=%d in_halmem=%d" % (r.rmutex_mode, r.wmutex_mode,r.type,r.in_halmem)
 
-halring = hal.Ring("halmemring%d" % os.getpid(), size=4096, in_halmem=True)
-shmring = hal.Ring("shmsegring%d" % os.getpid(), size=4096)
-
-print_ring(halring)
-print_ring(shmring)
-
 # retrieve list of ring names
 rings = hal.rings()
 print "rings: ", rings
 
 # Message details:
-#msg_fmt  = '<d'
 msg_fmt  = 'd'
 msg_size = struct.calcsize(msg_fmt)
 
@@ -72,12 +65,13 @@ def callback(data):
     # rospy.loginfo(rospy.get_caller_id() + "I heard %s", data.data)
     print 'In callback'
     for pose in data.points:
-        print pose.positions[0]
+        # print pose.positions[0]
+        print ["{0:0.2e}".format(i) for i in pose.positions]
 
         if w.available > msg_size:
             msg = struct.pack('d',pose.positions[0])
             w.write(msg)
-            print " ".join(hex(ord(n)) for n in msg)
+            # print " ".join(hex(ord(n)) for n in msg)
 
 
     # investigate scratchpad region if one is defined
