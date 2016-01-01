@@ -60,7 +60,8 @@ rings = hal.rings()
 print "rings: ", rings
 
 # Message details:
-msg_fmt  = '<d'
+#msg_fmt  = '<d'
+msg_fmt  = 'd'
 msg_size = struct.calcsize(msg_fmt)
 
 # Global variable for ring handle
@@ -93,11 +94,11 @@ def listener():
     # run simultaneously.
     rospy.init_node('listener', anonymous=True)
 
-    if "ring_0" in rings:
+    if "jointpos" in rings:
 
         # attach to existing ring
         global w
-        w = hal.Ring("ring_0")
+        w = hal.Ring("jointpos")
 
         # see what we have
         print_ring(w)
