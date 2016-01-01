@@ -7,8 +7,9 @@ Launch a ROS configuration that generates /joint_path_command messages
 I used the Example 3.5 RViz:
 http://aeswiki.datasys.swri.edu/rositraining/indigo/Exercises/3.5
 
-From machinekit/src/machinetalk/msgcomponents launch the HAL RT Ring:
-halcmd -f recordread.hal
+Start the realtime environment and launch the HAL RT Ring:
+realtime start
+halcmd -f joint_stream.hal
 
 Launch the python listener code:
 rosrun listener listener.py
