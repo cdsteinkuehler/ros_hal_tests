@@ -87,12 +87,13 @@ FUNCTION(_) {
 
     if (record_read(&rb, (const void**)&d, &size) == 0) {
         // Copy data to output
-        // dataf = data;
-        //memcpy(buf, data, size > sizeof(buf) ? sizeof(buf) : size);
-        joint_pos_cmd(0) = *d;
-        rtapi_print_msg(RTAPI_MSG_INFO,"got %g", *d);
-        //lo = buf[0].u[0];
-        //hi = buf[0].u[1];
+        joint_pos_cmd(0) = d[0];
+        joint_pos_cmd(1) = d[1];
+        joint_pos_cmd(2) = d[2];
+        joint_pos_cmd(3) = d[3];
+        joint_pos_cmd(4) = d[4];
+        joint_pos_cmd(5) = d[5];
+        rtapi_print_msg(RTAPI_MSG_INFO,"got %g", d[0]);
         avail = size;        
 
         // consume record
