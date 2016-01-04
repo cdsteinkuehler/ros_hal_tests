@@ -39,8 +39,12 @@ pin out u32 underrun   "number of failed read attempts";
 pin out u32 received   "number of successful read attempts";
 pin out u32 tooslow    "number of times the reader couldnt keep up with the writer";
 pin out u32 avail      "number of bytes (valid data) currently available in the buffer";
-pin out u32 hi;
-pin out u32 lo;
+pin out s32 time_s;
+pin out s32 time_ns;
+
+pin out s32 time_l;
+pin out s32 time_c;
+pin out s32 time_n;
 
 function _;
 
@@ -63,7 +67,7 @@ ToDo more detail goes here
 #define MAXSIZE 1024
 
 #include "hal_priv.h"
-#include "hal_ring.h"	        /* ringbuffer declarations */
+#include "hal_ring.h"           /* ringbuffer declarations */
 
 typedef union {
     hal_s32_t s[2];
@@ -71,39 +75,104 @@ typedef union {
     hal_float_t f[1];
 } hal_data_univ;
 
+typedef struct {
+    hal_s32_t   time;
+    hal_float_t joint[6];
+} JointTrajPoint;
+
 static char *ring = "ring_0";
 RTAPI_MP_STRING(ring,  "name of ring to attach");
 
 static ringbuffer_t rb;
 static char *name = "joint_stream";
 
+static JointTrajPoint last_pt, curr_pt, next_pt;
+
 FUNCTION(_) {
     ringvec_t vec[2];
     size_t size;
     const void *data;
     const double *dataf;
-    hal_data_univ buf[6];
-    const double *d;
+    hal_data_univ *buf;
+    hal_s32_t sec, nsec, ustime;
+    hal_float_t alpha;
+    int i;
 
-    if (record_read(&rb, (const void**)&d, &size) == 0) {
-        // Copy data to output
-        joint_pos_cmd(0) = d[0];
-        joint_pos_cmd(1) = d[1];
-        joint_pos_cmd(2) = d[2];
-        joint_pos_cmd(3) = d[3];
-        joint_pos_cmd(4) = d[4];
-        joint_pos_cmd(5) = d[5];
-        rtapi_print_msg(RTAPI_MSG_INFO,"got %g", d[0]);
-        avail = size;        
+    // If we're caught up...
+    if (curr_pt.time >= next_pt.time) {
+        // ...check for a new point
+        if (record_read(&rb, (const void**)&buf, &size) == 0) {
 
-        // consume record
-        record_shift(&rb);
-        received++;
-    } else {
-	// ring empty
-	underrun++;
-	return;
+            // Copy data to output
+            sec              = buf[0].s[0];
+            nsec             = buf[0].s[1];
+
+            for (i=0; i<6; i++) {
+                next_pt.joint[i] = buf[i+1].f[0];
+                rtapi_print_msg(RTAPI_MSG_INFO,"got %i:%g", i, buf[i+1].f[0]);
+            }
+
+            // consume record
+            record_shift(&rb);
+            received++;
+
+            // Process what we got
+            avail = size;
+            time_s = sec;
+            time_ns = nsec;
+
+            // Use 32-bit uS time values for simplicity, covers up to apx. +/- 35 min.
+            next_pt.time = sec * 1000000 + (nsec / 1000);
+
+            // If time_from_start is less than our current time, we have a new
+            // trajectory, so reset the times on the previous points, otherwise
+            // it's just the next point in the path
+            if (next_pt.time < curr_pt.time) {
+                curr_pt.time = 0;
+                last_pt.time = 0;
+            }
+        }
     }
+
+    // If we're working towards a goal, keep going
+    if (curr_pt.time < next_pt.time) {
+        // Move forward to next time period
+        curr_pt.time += (period / 1000);
+
+        if (curr_pt.time >= next_pt.time) {
+            // We're done, stop at the target point
+            last_pt = next_pt;
+            curr_pt = next_pt;
+        } else {
+            // Otherwise, calculate the next interpolated point
+            //interpolate(&last_pt, &curr_pt, &next_pt);
+
+            if (next_pt.time > last_pt.time) {
+                alpha = (hal_float_t)(curr_pt.time - last_pt.time) / (hal_float_t)(next_pt.time - last_pt.time);
+                for (i=0; i<6; i++) {
+                    curr_pt.joint[i] = last_pt.joint[i] + alpha * (next_pt.joint[i] - last_pt.joint[i]);
+                }
+            } else {
+                alpha = 1.0;
+                curr_pt = next_pt;
+            }
+        }
+
+        // Update the outputs
+        for (i=0; i<6; i++) {
+            joint_pos_cmd(i) = curr_pt.joint[i];
+        }
+    } else {
+        // The ring buffer is empty and we've finished our current point
+        underrun++;
+    }
+
+    // Debugging, possibly useful to trigger HALscope
+    time_l  = last_pt.time;
+    time_c  = curr_pt.time;
+    time_n  = next_pt.time;
+
+    return;
 }
 
 int rtapi_app_main(void)
@@ -112,35 +181,35 @@ int rtapi_app_main(void)
 
     comp_id = hal_init(name);
     if (comp_id < 0) {
-	rtapi_print_msg(RTAPI_MSG_ERR,
-			"%s: ERROR: hal_init() failed: %d\n",
-			name, comp_id);
-	return -1;
+    rtapi_print_msg(RTAPI_MSG_ERR,
+            "%s: ERROR: hal_init() failed: %d\n",
+            name, comp_id);
+    return -1;
     }
     if ((retval = hal_ring_attach(ring, &rb,NULL))) {
-	rtapi_print_msg(RTAPI_MSG_ERR,
-			"%s: ERROR: hal_ring_attach(%s) failed: %d\n",
-			name, ring, retval);
-	return -1;
+    rtapi_print_msg(RTAPI_MSG_ERR,
+            "%s: ERROR: hal_ring_attach(%s) failed: %d\n",
+            name, ring, retval);
+    return -1;
     }
 
     rtapi_print_msg(RTAPI_MSG_INFO,
-		    "%s: attached ring '%s' size=%zu type=%d"
-		    " rmutex=%d wmutex=%d reader=%d writer=%d scratchpad=%zu\n",
-		    name, ring, rb.header->size,
-		    rb.header->type,
-		    ring_use_rmutex(&rb), ring_use_wmutex(&rb),
-		    rb.header->reader, rb.header->writer,
-		    ring_scratchpad_size(&rb));
+            "%s: attached ring '%s' size=%zu type=%d"
+            " rmutex=%d wmutex=%d reader=%d writer=%d scratchpad=%zu\n",
+            name, ring, rb.header->size,
+            rb.header->type,
+            ring_use_rmutex(&rb), ring_use_wmutex(&rb),
+            rb.header->reader, rb.header->writer,
+            ring_scratchpad_size(&rb));
 
     rb.header->reader = comp_id;
     rb.header->reader_instance = rtapi_instance;
 
     if ((retval = export(name, 0))) {
-	rtapi_print_msg(RTAPI_MSG_ERR,
-			"%s: ERROR: export(%s) failed: %d\n",
-			name, name, retval);
-	return -1;
+    rtapi_print_msg(RTAPI_MSG_ERR,
+            "%s: ERROR: export(%s) failed: %d\n",
+            name, name, retval);
+    return -1;
     }
     hal_ready(comp_id);
     return 0;
@@ -151,9 +220,9 @@ void rtapi_app_exit(void)
     int retval;
     rb.header->reader = 0;
     if ((retval = hal_ring_detach(ring, &rb)) < 0)
-	rtapi_print_msg(RTAPI_MSG_ERR,
-			"%s: ERROR: hal_ring_detach(%s) failed: %d\n",
-			name, ring, retval);
+    rtapi_print_msg(RTAPI_MSG_ERR,
+            "%s: ERROR: hal_ring_detach(%s) failed: %d\n",
+            name, ring, retval);
     hal_exit(comp_id);
 }
 

@@ -54,7 +54,7 @@ rings = hal.rings()
 print "rings: ", rings
 
 # Message details:
-msg_fmt  = '6d'
+msg_fmt  = '=2l6d'
 msg_size = struct.calcsize(msg_fmt)
 
 # Global variable for ring handle
@@ -66,10 +66,13 @@ def callback(data):
     print 'In callback'
     for pose in data.points:
         # print pose.positions[0]
+        print pose.time_from_start
         print ["{0:0.2e}".format(i) for i in pose.positions]
 
         if w.available > msg_size:
-            msg = struct.pack(msg_fmt, pose.positions[0],
+            msg = struct.pack(msg_fmt, pose.time_from_start.secs,
+                                       pose.time_from_start.nsecs,
+                                       pose.positions[0],
                                        pose.positions[1],
                                        pose.positions[2],
                                        pose.positions[3],
